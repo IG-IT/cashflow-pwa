@@ -181,6 +181,30 @@ button.active {
   font-size: 0.85rem;
 }
 
+.child-control {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  margin-bottom: 12px;
+}
+
+.child-buttons {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.child-count {
+  min-width: 28px;
+  text-align: center;
+  font-weight: 600;
+}
+
 .split {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
@@ -261,6 +285,10 @@ button.active {
 .row-actions {
   display: flex;
   gap: 8px;
+}
+
+.ledger-actions {
+  margin: 8px 0 12px;
 }
 
 .sell-row {

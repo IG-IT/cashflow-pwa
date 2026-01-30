@@ -188,6 +188,7 @@ export default function App() {
 
   const [inOutAmount, setInOutAmount] = useState("");
   const [sellInputs, setSellInputs] = useState<Record<string, { price: string; shares: string }>>({});
+  const [showAllLedger, setShowAllLedger] = useState(false);
 
   const derived = useMemo(() => {
     const passiveIncome = passiveIncomeMonthly(player);
@@ -637,14 +638,24 @@ export default function App() {
               Name
               <input value={player.name} onChange={(event) => updatePlayer((draft) => { draft.name = event.target.value; })} />
             </label>
-            <label>
-              Children
-              <input
-                inputMode="numeric"
-                value={String(player.children)}
-                onChange={(event) => handleSetChildren(event.target.value)}
-              />
-            </label>
+            <div className="child-control">
+              <span>Children</span>
+              <div className="child-buttons">
+                <button
+                  className="ghost"
+                  onClick={() => handleSetChildren(String(Math.max(0, player.children - 1)))}
+                >
+                  -1
+                </button>
+                <span className="child-count">{player.children}</span>
+                <button
+                  className="ghost"
+                  onClick={() => handleSetChildren(String(player.children + 1))}
+                >
+                  +1
+                </button>
+              </div>
+            </div>
             <div className="summary">
               <div>
                 <span>Passive Income</span>
@@ -1021,9 +1032,14 @@ export default function App() {
 
       {screen === "ledger" && (
         <section className="panel ledger">
-          <h2>Ledger (latest 50)</h2>
+          <h2>Ledger {showAllLedger ? "(all)" : "(latest 50)"}</h2>
+          <div className="row-actions ledger-actions">
+            <button className="ghost" onClick={() => setShowAllLedger((prev) => !prev)}>
+              {showAllLedger ? "Show latest 50" : "Show all"}
+            </button>
+          </div>
           {player.ledger.length === 0 && <p className="muted">No transactions yet.</p>}
-          {player.ledger.slice(0, 50).map((entry) => (
+          {(showAllLedger ? player.ledger : player.ledger.slice(0, 50)).map((entry) => (
             <div key={entry.id} className="ledger-row">
               <span className="muted">{new Date(entry.ts).toLocaleString()}</span>
               <span>{entry.type.replace("_", " ")}</span>

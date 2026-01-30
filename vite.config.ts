@@ -8,7 +8,7 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: "autoUpdate",
-      includeAssets: ["vite.svg"],
+      includeAssets: ["icon.png"],
       manifest: {
         name: "Cashflow Helper",
         short_name: "Cashflow",
@@ -18,9 +18,9 @@ export default defineConfig({
         theme_color: "#1d4ed8",
         icons: [
           {
-            src: "vite.svg",
-            sizes: "any",
-            type: "image/svg+xml",
+            src: "icon.png",
+            sizes: "512x512",
+            type: "image/png",
           },
         ],
       },
