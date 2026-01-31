@@ -1,3 +1,10 @@
+.app,
+.container {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: hidden;
+}
+
 .app {
   min-height: 100vh;
   padding: 48px 24px 96px;
@@ -133,6 +140,14 @@ label {
   gap: 6px;
   font-size: 0.9rem;
   margin-bottom: 12px;
+}
+
+input,
+select,
+textarea,
+button {
+  max-width: 100%;
+  width: 100%;
 }
 
 input,

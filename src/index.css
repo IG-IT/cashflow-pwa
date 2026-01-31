@@ -42,7 +42,9 @@
   --toast-text: #e2e8f0;
 }
 
-* {
+*,
+*::before,
+*::after {
   box-sizing: border-box;
 }
 
@@ -51,8 +53,25 @@ body {
   min-height: 100vh;
   background: var(--bg);
   color: var(--text);
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
 }
 
 #root {
   min-height: 100vh;
+}
+
+/* === iOS horizontal scroll hard fix === */
+html,
+body {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: hidden;
+  position: relative;
+}
+
+#root {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: hidden;
 }

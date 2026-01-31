@@ -82,6 +82,13 @@ export type LedgerEntry = {
   note?: string;
 };
 
+export type FastTrackState = {
+  beginningIncome: number; // (rounded passive income) * 100
+  currentIncome: number; // grows as you add fast track businesses
+  goal: number; // beginningIncome + 50_000
+  won: boolean;
+};
+
 export type Player = {
   id: string;
   name: string;
@@ -93,4 +100,5 @@ export type Player = {
   liabilities: Liability[];
   ledger: LedgerEntry[];
   announcedFastTrack: boolean;
+  fastTrack?: FastTrackState;
 };

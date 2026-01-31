@@ -33,14 +33,43 @@ function uid() {
   return Math.random().toString(36).slice(2, 10);
 }
 
-function num(v: string): number {
-  const normalized = v.replace(/\s+/g, "").replace(",", ".");
-  const parsed = Number(normalized);
-  return Number.isFinite(parsed) ? parsed : 0;
+function num(raw: string): number {
+  if (!raw) return 0;
+
+  // remove normal spaces + NBSP (iOS)
+  let s = raw.replace(/[\s\u00A0]/g, "");
+
+  // keep only digits, comma, dot, minus
+  s = s.replace(/[^\d,.\-]/g, "");
+
+  const hasComma = s.includes(",");
+  const hasDot = s.includes(".");
+
+  if (hasComma && hasDot) {
+    // last separator is decimal
+    const lastComma = s.lastIndexOf(",");
+    const lastDot = s.lastIndexOf(".");
+    const decimalIsComma = lastComma > lastDot;
+
+    // remove thousands separator
+    s = decimalIsComma ? s.replace(/\./g, "") : s.replace(/,/g, "");
+    // normalize decimal separator to dot
+    s = decimalIsComma ? s.replace(",", ".") : s;
+  } else {
+    // only comma -> treat as decimal comma
+    s = s.replace(",", ".");
+  }
+
+  const n = Number(s);
+  return Number.isFinite(n) ? n : 0;
 }
 
 function clampNonNegative(n: number): number {
   return Number.isFinite(n) && n > 0 ? n : 0;
+}
+
+function roundToNearest1000(x: number) {
+  return Math.round(x / 1000) * 1000;
 }
 
 function formatMoney(value: number): string {
@@ -199,6 +228,7 @@ export default function App() {
   });
 
   const [inOutAmount, setInOutAmount] = useState("");
+  const [fastTrackAdd, setFastTrackAdd] = useState("");
   const [sellInputs, setSellInputs] = useState<Record<string, { price: string; shares: string }>>({});
   const [showAllLedger, setShowAllLedger] = useState(false);
 
@@ -260,10 +290,27 @@ export default function App() {
   }, [playerPresets]);
 
   function commitPlayer(next: Player) {
+    // Enter Fast Track
     if (next.phase === "rat_race" && !next.announcedFastTrack && shouldEnterFastTrack(next)) {
+      const passive = passiveIncomeMonthly(next);
+      const beginning = roundToNearest1000(passive) * 100;
       next.phase = "fast_track";
       next.announcedFastTrack = true;
-      setToast("Passive income now covers expenses. You are on the Fast Track!");
+      next.fastTrack = {
+        beginningIncome: beginning,
+        currentIncome: beginning,
+        goal: beginning + 50_000,
+        won: false,
+      };
+      setToast("🎉 Passive income covers expenses. You're out of the Rat Race! Welcome to the Fast Track.");
+    }
+
+    // Win check on Fast Track
+    if (next.phase === "fast_track" && next.fastTrack && !next.fastTrack.won) {
+      if (next.fastTrack.currentIncome >= next.fastTrack.goal) {
+        next.fastTrack.won = true;
+        setToast("🏆 You win! Your CASHFLOW Day Income reached the goal.");
+      }
     }
     setPlayer(next);
   }
@@ -679,24 +726,37 @@ export default function App() {
 
   function handleCollectPaycheck() {
     updatePlayer((draft) => {
-      const amount = monthlyCashflow(draft);
-      draft.cash += amount;
-      // Reduce liability principals by their monthly payment on payday
-      draft.liabilities = draft.liabilities
-        .map((liability) => {
-          const payment = clampNonNegative(liability.paymentMonthly || 0);
-          if (payment <= 0) return liability;
-          const nextPrincipal = Math.max(0, (liability.principal || 0) - payment);
-          if (liability.origin === "fixed" && liability.fixedKey) {
-            if (liability.fixedKey === "mortgage") draft.profession.mortgageBalance = nextPrincipal;
-            if (liability.fixedKey === "studentLoan") draft.profession.studentLoanBalance = nextPrincipal;
-            if (liability.fixedKey === "carLoan") draft.profession.carLoanBalance = nextPrincipal;
-            if (liability.fixedKey === "retailDebt") draft.profession.retailDebtBalance = nextPrincipal;
-          }
-          return { ...liability, principal: nextPrincipal };
-        })
-        .filter((liability) => (liability.principal || 0) > 0 || (liability.paymentMonthly || 0) > 0);
-      draft.ledger.unshift(addLedger(amount, "paycheck", "Collect paycheck"));
+      // RAT RACE payday: cash += monthly cashflow
+      if (draft.phase === "rat_race") {
+        const amount = monthlyCashflow(draft);
+        draft.cash += amount;
+
+        // Optional: amortize principals for tracking (doesn't affect cash)
+        draft.liabilities = draft.liabilities
+          .map((liability) => {
+            const payment = clampNonNegative(liability.paymentMonthly || 0);
+            if (payment <= 0) return liability;
+            const nextPrincipal = Math.max(0, (liability.principal || 0) - payment);
+
+            if (liability.origin === "fixed" && liability.fixedKey) {
+              if (liability.fixedKey === "mortgage") draft.profession.mortgageBalance = nextPrincipal;
+              if (liability.fixedKey === "studentLoan") draft.profession.studentLoanBalance = nextPrincipal;
+              if (liability.fixedKey === "carLoan") draft.profession.carLoanBalance = nextPrincipal;
+              if (liability.fixedKey === "retailDebt") draft.profession.retailDebtBalance = nextPrincipal;
+            }
+
+            return { ...liability, principal: nextPrincipal };
+          })
+          .filter((liability) => (liability.principal || 0) > 0 || (liability.paymentMonthly || 0) > 0);
+
+        draft.ledger.unshift(addLedger(amount, "paycheck", "Collect paycheck (Rat Race)"));
+        return;
+      }
+
+      // FAST TRACK payday: cash += CASHFLOW Day Income
+      const income = draft.fastTrack?.currentIncome ?? 0;
+      draft.cash += income;
+      draft.ledger.unshift(addLedger(income, "paycheck", "Collect paycheck (Fast Track)"));
     });
   }
 
@@ -891,6 +951,55 @@ export default function App() {
                 <strong>{formatMoney(derived.cashflow)}</strong>
               </div>
             </div>
+            {player.phase === "fast_track" && player.fastTrack ? (
+              <div className="panel" style={{ marginTop: 12 }}>
+                <h2>Fast Track</h2>
+                <div className="summary">
+                  <div>
+                    <span>Beginning CASHFLOW Day Income</span>
+                    <strong>{formatMoney(player.fastTrack.beginningIncome)}</strong>
+                  </div>
+                  <div>
+                    <span>Current CASHFLOW Day Income</span>
+                    <strong>{formatMoney(player.fastTrack.currentIncome)}</strong>
+                  </div>
+                  <div>
+                    <span>Goal (Beginning + 50,000)</span>
+                    <strong>{formatMoney(player.fastTrack.goal)}</strong>
+                  </div>
+                  <div>
+                    <span>Status</span>
+                    <strong>{player.fastTrack.won ? "WON 🏆" : "IN PLAY"}</strong>
+                  </div>
+                </div>
+                <div className="form-block">
+                  <label>
+                    Add Fast Track Business Cashflow (monthly)
+                    <input
+                      inputMode="numeric"
+                      value={fastTrackAdd}
+                      onChange={(e) => setFastTrackAdd(e.target.value)}
+                    />
+                  </label>
+                  <button
+                    className="primary"
+                    onClick={() => {
+                      const add = num(fastTrackAdd);
+                      if (player.phase !== "fast_track" || !player.fastTrack || add === 0) return;
+                      updatePlayer((draft) => {
+                        if (!draft.fastTrack) return;
+                        draft.fastTrack.currentIncome += add;
+                        draft.ledger.unshift(addLedger(0, "buy_asset", `Fast Track: +${add} income`));
+                      });
+                      setFastTrackAdd("");
+                    }}
+                    disabled={player.phase !== "fast_track" || !player.fastTrack}
+                  >
+                    Add to CASHFLOW Day Income
+                  </button>
+                </div>
+              </div>
+            ) : null}
           </div>
 
           <div className="panel">
@@ -1294,7 +1403,11 @@ export default function App() {
           <div className="panel">
             <h2>Paycheck & One-time</h2>
             <button className="primary" onClick={handleCollectPaycheck}>
-              Collect Paycheck ({formatMoney(derived.cashflow)})
+              Collect Paycheck (
+                {player.phase === "fast_track" && player.fastTrack
+                  ? formatMoney(player.fastTrack.currentIncome)
+                  : formatMoney(derived.cashflow)}
+              )
             </button>
             <div className="form-block">
               <label>
