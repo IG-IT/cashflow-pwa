@@ -25,6 +25,7 @@ import "./App.css";
 const STORAGE_KEY = "cashflow_pwa_v1";
 const PRESETS_KEY = "cashflow_pwa_presets_v1";
 const PLAYER_PRESETS_KEY = "cashflow_pwa_player_presets_v1";
+const THEME_KEY = "cashflow_pwa_theme";
 
 type Screen = "dashboard" | "assets" | "liabilities" | "in_out" | "ledger" | "profession";
 
@@ -148,6 +149,10 @@ export default function App() {
   const [player, setPlayer] = useState<Player>(() => loadPlayer());
   const [toast, setToast] = useState<string | null>(null);
   const [screen, setScreen] = useState<Screen>("dashboard");
+  const [theme, setTheme] = useState<"light" | "dark">(() => {
+    const stored = localStorage.getItem(THEME_KEY);
+    return stored === "dark" ? "dark" : "light";
+  });
   const [professionPresets, setProfessionPresets] = useState<ProfessionPreset[]>(() => loadProfessionPresets());
   const [playerPresets, setPlayerPresets] = useState<PlayerPreset[]>(() => loadPlayerPresets());
   const [newPresetName, setNewPresetName] = useState("");
@@ -169,6 +174,13 @@ export default function App() {
     cost: "",
     downPayment: "",
     liability: "",
+    cashFlowMonthly: "",
+    autoUpdateCash: true,
+  });
+  const [realEstateForm, setRealEstateForm] = useState({
+    name: "",
+    cost: "",
+    downPayment: "",
     cashFlowMonthly: "",
     autoUpdateCash: true,
   });
@@ -210,9 +222,34 @@ export default function App() {
     };
   }, [player]);
 
+  const fixedLiabilities = useMemo(
+    () =>
+      [
+        { name: "Mortgage", balance: player.profession.mortgageBalance, payment: player.profession.mortgagePayment },
+        { name: "Retail Debt", balance: player.profession.retailDebtBalance, payment: player.profession.retailDebtPayment },
+        { name: "Car Loan", balance: player.profession.carLoanBalance, payment: player.profession.carLoanPayment },
+        { name: "Student Loan", balance: player.profession.studentLoanBalance, payment: player.profession.studentLoanPayment },
+        { name: "Rent", balance: player.profession.rentBalance, payment: player.profession.rentPayment },
+      ].filter((item) => (item.balance || 0) > 0 || (item.payment || 0) > 0),
+    [player.profession]
+  );
+
   useEffect(() => {
     savePlayer(player);
   }, [player]);
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+    localStorage.setItem(THEME_KEY, theme);
+  }, [theme]);
+
+  useEffect(() => {
+    updatePlayer((draft) => {
+      syncFixedLiabilitiesFromProfession(draft);
+    });
+    // run once on mount to hydrate fixed liabilities
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     saveProfessionPresets(professionPresets);
@@ -254,6 +291,7 @@ export default function App() {
       paymentMonthly: 0,
       autoUpdateCash: true,
       createdAt: Date.now(),
+      origin: "auto",
     };
     draft.liabilities.unshift(liability);
     draft.cash += principal;
@@ -267,6 +305,7 @@ export default function App() {
         draft.cash = professionForm.savings || 0;
       }
       draft.ledger.unshift(addLedger(0, "set_profession", professionForm.professionName));
+      syncFixedLiabilitiesFromProfession(draft);
     });
     const presetName = professionForm.professionName.trim();
     if (presetName) {
@@ -357,6 +396,41 @@ export default function App() {
       return;
     }
 
+    if (assetType === "real_estate") {
+      const cost = clampNonNegative(num(realEstateForm.cost));
+      const downPayment = clampNonNegative(num(realEstateForm.downPayment));
+      const cashFlowMonthly = num(realEstateForm.cashFlowMonthly);
+      if (!realEstateForm.name || cost <= 0 || downPayment <= 0) {
+        setToast("Add real estate: name, cost, and down payment are required.");
+        return;
+      }
+      const liability = Math.max(0, cost - downPayment);
+      const asset: Asset = {
+        id: uid(),
+        type: "real_estate",
+        name: realEstateForm.name,
+        autoUpdateCash: realEstateForm.autoUpdateCash,
+        createdAt: Date.now(),
+        details: { cost, downPayment, liability, cashFlowMonthly },
+      };
+      updatePlayer((draft) => {
+        draft.assets.unshift(asset);
+        if (asset.autoUpdateCash) {
+          borrowIfNeeded(draft, downPayment, `Real Estate: ${asset.name}`);
+          draft.cash -= downPayment;
+        }
+        draft.ledger.unshift(addLedger(-downPayment, "buy_asset", `Real Estate: ${asset.name}`));
+      });
+      setRealEstateForm({
+        name: "",
+        cost: "",
+        downPayment: "",
+        cashFlowMonthly: "",
+        autoUpdateCash: true,
+      });
+      return;
+    }
+
     if (assetType === "personal_property") {
       const cost = clampNonNegative(num(propertyForm.cost));
       if (!propertyForm.name || cost <= 0) {
@@ -432,6 +506,28 @@ export default function App() {
       return;
     }
 
+    if (asset.type === "business" || asset.type === "real_estate") {
+      if (sellPrice <= 0) {
+        setToast("Sell asset: enter a sell price.");
+        return;
+      }
+      const liability = assetLiability(asset);
+      if (sellPrice < liability) {
+        setToast("Sell asset: price must cover the liability.");
+        return;
+      }
+      const proceeds = sellPrice - liability;
+      updatePlayer((draft) => {
+        const draftAsset = draft.assets.find((item) => item.id === assetId);
+        if (!draftAsset) return;
+        draft.cash += proceeds;
+        draft.ledger.unshift(addLedger(proceeds, "sell_asset", `${draftAsset.type.replace("_", " ")}: ${draftAsset.name}`));
+        draft.assets = draft.assets.filter((item) => item.id !== assetId);
+      });
+      setSellInputs((prev) => ({ ...prev, [assetId]: { price: "" , shares: "" } }));
+      return;
+    }
+
     if (sellPrice <= 0) {
       setToast("Sell asset: enter a sell price.");
       return;
@@ -462,6 +558,7 @@ export default function App() {
       paymentMonthly,
       autoUpdateCash: liabilityForm.autoUpdateCash,
       createdAt: Date.now(),
+      origin: "manual",
     };
     updatePlayer((draft) => {
       draft.liabilities.unshift(liability);
@@ -477,7 +574,106 @@ export default function App() {
     updatePlayer((draft) => {
       const liability = draft.liabilities.find((item) => item.id === liabilityId);
       draft.liabilities = draft.liabilities.filter((item) => item.id !== liabilityId);
+      if (liability?.origin === "fixed" && liability.fixedKey) {
+        clearFixedDebt(draft, liability.fixedKey);
+      }
       draft.ledger.unshift(addLedger(0, "remove_liability", liability ? liability.name : "Liability removed"));
+    });
+  }
+
+  function handlePayOffLiability(liabilityId: string) {
+    updatePlayer((draft) => {
+      const liability = draft.liabilities.find((item) => item.id === liabilityId);
+      if (!liability) return;
+      const principal = clampNonNegative(liability.principal || 0);
+      if (principal <= 0) return;
+      if (draft.cash < principal) {
+        setToast("Not enough cash to pay off this liability.");
+        return;
+      }
+      draft.cash -= principal;
+      draft.liabilities = draft.liabilities.filter((item) => item.id !== liabilityId);
+      if (liability.origin === "fixed" && liability.fixedKey) {
+        clearFixedDebt(draft, liability.fixedKey);
+      }
+      draft.ledger.unshift(addLedger(-principal, "pay_off_liability", `Pay off: ${liability.name}`));
+    });
+  }
+
+  function clearFixedDebt(draft: Player, key: "mortgage" | "studentLoan" | "carLoan" | "retailDebt") {
+    if (key === "mortgage") {
+      draft.profession.mortgageBalance = 0;
+      draft.profession.mortgagePayment = 0;
+    }
+    if (key === "studentLoan") {
+      draft.profession.studentLoanBalance = 0;
+      draft.profession.studentLoanPayment = 0;
+    }
+    if (key === "carLoan") {
+      draft.profession.carLoanBalance = 0;
+      draft.profession.carLoanPayment = 0;
+    }
+    if (key === "retailDebt") {
+      draft.profession.retailDebtBalance = 0;
+      draft.profession.retailDebtPayment = 0;
+    }
+  }
+
+  function syncFixedLiabilitiesFromProfession(draft: Player) {
+    const fixedDefs = [
+      {
+        key: "mortgage" as const,
+        name: "Mortgage",
+        balance: draft.profession.mortgageBalance || 0,
+        payment: draft.profession.mortgagePayment || 0,
+      },
+      {
+        key: "studentLoan" as const,
+        name: "Student Loan",
+        balance: draft.profession.studentLoanBalance || 0,
+        payment: draft.profession.studentLoanPayment || 0,
+      },
+      {
+        key: "carLoan" as const,
+        name: "Car Loan",
+        balance: draft.profession.carLoanBalance || 0,
+        payment: draft.profession.carLoanPayment || 0,
+      },
+      {
+        key: "retailDebt" as const,
+        name: "Retail Debt",
+        balance: draft.profession.retailDebtBalance || 0,
+        payment: draft.profession.retailDebtPayment || 0,
+      },
+    ];
+
+    fixedDefs.forEach((def) => {
+      const id = `fixed_${def.key}`;
+      const existing = draft.liabilities.find((item) => item.id === id);
+      if (def.balance > 0 || def.payment > 0) {
+        if (existing) {
+          existing.name = def.name;
+          existing.type = "other";
+          existing.principal = def.balance;
+          existing.paymentMonthly = def.payment;
+          existing.origin = "fixed";
+          existing.fixedKey = def.key;
+        } else {
+          draft.liabilities.unshift({
+            id,
+            name: def.name,
+            type: "other",
+            principal: def.balance,
+            paymentMonthly: def.payment,
+            autoUpdateCash: false,
+            createdAt: Date.now(),
+            origin: "fixed",
+            fixedKey: def.key,
+          });
+        }
+      } else if (existing) {
+        draft.liabilities = draft.liabilities.filter((item) => item.id !== id);
+      }
     });
   }
 
@@ -485,6 +681,21 @@ export default function App() {
     updatePlayer((draft) => {
       const amount = monthlyCashflow(draft);
       draft.cash += amount;
+      // Reduce liability principals by their monthly payment on payday
+      draft.liabilities = draft.liabilities
+        .map((liability) => {
+          const payment = clampNonNegative(liability.paymentMonthly || 0);
+          if (payment <= 0) return liability;
+          const nextPrincipal = Math.max(0, (liability.principal || 0) - payment);
+          if (liability.origin === "fixed" && liability.fixedKey) {
+            if (liability.fixedKey === "mortgage") draft.profession.mortgageBalance = nextPrincipal;
+            if (liability.fixedKey === "studentLoan") draft.profession.studentLoanBalance = nextPrincipal;
+            if (liability.fixedKey === "carLoan") draft.profession.carLoanBalance = nextPrincipal;
+            if (liability.fixedKey === "retailDebt") draft.profession.retailDebtBalance = nextPrincipal;
+          }
+          return { ...liability, principal: nextPrincipal };
+        })
+        .filter((liability) => (liability.principal || 0) > 0 || (liability.paymentMonthly || 0) > 0);
       draft.ledger.unshift(addLedger(amount, "paycheck", "Collect paycheck"));
     });
   }
@@ -545,6 +756,7 @@ export default function App() {
         draft.cash = preset.profession.savings || 0;
       }
       draft.ledger.unshift(addLedger(0, "set_profession", preset.name));
+      syncFixedLiabilitiesFromProfession(draft);
     });
     setToast(`Loaded profession preset: ${preset.name}`);
   }
@@ -607,7 +819,12 @@ export default function App() {
             <span>Cash on Hand</span>
             <strong>{formatMoney(player.cash)}</strong>
           </div>
-          <button className="ghost" onClick={handleReset}>Reset Game</button>
+          <div className="header-actions-row">
+            <button className="ghost" onClick={() => setTheme(theme === "dark" ? "light" : "dark")}>
+              {theme === "dark" ? "Light mode" : "Dark mode"}
+            </button>
+            <button className="ghost" onClick={handleReset}>Reset Game</button>
+          </div>
         </div>
       </header>
 
@@ -709,7 +926,7 @@ export default function App() {
           <div className="panel">
             <h2>Add Asset</h2>
             <div className="tabs">
-              {(["stocks", "business", "personal_property"] as AssetType[]).map((type) => (
+              {(["stocks", "business", "real_estate", "personal_property"] as AssetType[]).map((type) => (
                 <button
                   key={type}
                   className={assetType === type ? "active" : ""}
@@ -726,6 +943,11 @@ export default function App() {
                   Stock / Ticker Name
                   <input value={stockForm.name} onChange={(event) => setStockForm((prev) => ({ ...prev, name: event.target.value }))} />
                 </label>
+                <div className="cash-panel">
+                  <div>Cash On Hand: <strong>{formatMoney(player.cash)}</strong></div>
+                  <div>Paid: <strong>{formatMoney(clampNonNegative(num(stockForm.sharePrice)) * clampNonNegative(num(stockForm.numShares)))}</strong></div>
+                  <div>Left: <strong>{formatMoney(player.cash - (clampNonNegative(num(stockForm.sharePrice)) * clampNonNegative(num(stockForm.numShares))))}</strong></div>
+                </div>
                 <div className="split">
                   <label>
                     Share Price
@@ -770,6 +992,11 @@ export default function App() {
                   Business Name
                   <input value={businessForm.name} onChange={(event) => setBusinessForm((prev) => ({ ...prev, name: event.target.value }))} />
                 </label>
+                <div className="cash-panel">
+                  <div>Cash On Hand: <strong>{formatMoney(player.cash)}</strong></div>
+                  <div>Paid: <strong>{formatMoney(clampNonNegative(num(businessForm.downPayment)))}</strong></div>
+                  <div>Left: <strong>{formatMoney(player.cash - clampNonNegative(num(businessForm.downPayment)))}</strong></div>
+                </div>
                 <div className="split">
                   <label>
                     Cost
@@ -818,12 +1045,71 @@ export default function App() {
               </div>
             )}
 
+            {assetType === "real_estate" && (
+              <div className="form-block">
+                <label>
+                  Property Name
+                  <input value={realEstateForm.name} onChange={(event) => setRealEstateForm((prev) => ({ ...prev, name: event.target.value }))} />
+                </label>
+                <div className="cash-panel">
+                  <div>Cash On Hand: <strong>{formatMoney(player.cash)}</strong></div>
+                  <div>Paid: <strong>{formatMoney(clampNonNegative(num(realEstateForm.downPayment)))}</strong></div>
+                  <div>Left: <strong>{formatMoney(player.cash - clampNonNegative(num(realEstateForm.downPayment)))}</strong></div>
+                </div>
+                <div className="split">
+                  <label>
+                    Cost
+                    <input
+                      inputMode="numeric"
+                      value={realEstateForm.cost}
+                      onChange={(event) => setRealEstateForm((prev) => ({ ...prev, cost: event.target.value }))}
+                    />
+                  </label>
+                  <label>
+                    Down Payment
+                    <input
+                      inputMode="numeric"
+                      value={realEstateForm.downPayment}
+                      onChange={(event) => setRealEstateForm((prev) => ({ ...prev, downPayment: event.target.value }))}
+                    />
+                  </label>
+                </div>
+                <div className="split">
+                  <div className="mortgage-display">
+                    Mortgage: <strong>{formatMoney(Math.max(0, clampNonNegative(num(realEstateForm.cost)) - clampNonNegative(num(realEstateForm.downPayment))))}</strong>
+                  </div>
+                  <label>
+                    Monthly Cashflow
+                    <input
+                      inputMode="numeric"
+                      value={realEstateForm.cashFlowMonthly}
+                      onChange={(event) => setRealEstateForm((prev) => ({ ...prev, cashFlowMonthly: event.target.value }))}
+                    />
+                  </label>
+                </div>
+                <label className="checkbox">
+                  <input
+                    type="checkbox"
+                    checked={realEstateForm.autoUpdateCash}
+                    onChange={(event) => setRealEstateForm((prev) => ({ ...prev, autoUpdateCash: event.target.checked }))}
+                  />
+                  Auto update cash on purchase
+                </label>
+                <button className="primary" onClick={handleAddAsset}>Add Real Estate</button>
+              </div>
+            )}
+
             {assetType === "personal_property" && (
               <div className="form-block">
                 <label>
                   Property Name
                   <input value={propertyForm.name} onChange={(event) => setPropertyForm((prev) => ({ ...prev, name: event.target.value }))} />
                 </label>
+                <div className="cash-panel">
+                  <div>Cash On Hand: <strong>{formatMoney(player.cash)}</strong></div>
+                  <div>Paid: <strong>{formatMoney(clampNonNegative(num(propertyForm.cost)))}</strong></div>
+                  <div>Left: <strong>{formatMoney(player.cash - clampNonNegative(num(propertyForm.cost)))}</strong></div>
+                </div>
                 <label>
                   Cost
                   <input
@@ -859,7 +1145,9 @@ export default function App() {
                       <p className="muted">Cashflow: {formatMoney(assetMonthlyCashflow(asset))}</p>
                     )}
                     {assetLiability(asset) > 0 && (
-                      <p className="muted">Liability: {formatMoney(assetLiability(asset))}</p>
+                      <p className="muted">
+                        {asset.type === "real_estate" ? "Mortgage" : "Liability"}: {formatMoney(assetLiability(asset))}
+                      </p>
                     )}
                     <div className="sell-row">
                       {asset.type === "stocks" ? (
@@ -887,6 +1175,17 @@ export default function App() {
                       )}
                       <button className="ghost" onClick={() => handleSellAsset(asset.id)}>Sell</button>
                     </div>
+                    {(asset.type === "business" || asset.type === "real_estate") && sellInputs[asset.id]?.price ? (
+                      <p className="muted">
+                        Net to you:{" "}
+                        {formatMoney(
+                          Math.max(
+                            0,
+                            clampNonNegative(num(sellInputs[asset.id]?.price ?? "")) - assetLiability(asset)
+                          )
+                        )}
+                      </p>
+                    ) : null}
                   </div>
                   <button className="ghost" onClick={() => handleRemoveAsset(asset.id)}>Remove</button>
                 </div>
@@ -898,6 +1197,22 @@ export default function App() {
 
       {screen === "liabilities" && (
         <section className="grid">
+          <div className="panel">
+            <h2>Fixed Liabilities</h2>
+            <div className="list">
+              {fixedLiabilities.length === 0 && <p className="muted">No fixed liabilities yet.</p>}
+              {fixedLiabilities.map((liability) => (
+                <div key={liability.name} className="list-item">
+                  <div>
+                    <strong>{liability.name}</strong>
+                    <p className="muted">Balance: {formatMoney(liability.balance || 0)}</p>
+                    <p className="muted">Payment: {formatMoney(liability.payment || 0)}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
           <div className="panel">
             <h2>Add Liability</h2>
             <div className="form-block">
@@ -946,7 +1261,7 @@ export default function App() {
           </div>
 
           <div className="panel">
-            <h2>Liabilities List</h2>
+            <h2>Other Liabilities</h2>
             <div className="list">
               {player.liabilities.length === 0 && <p className="muted">No liabilities yet.</p>}
               {player.liabilities.map((liability) => (
@@ -957,7 +1272,16 @@ export default function App() {
                     <p className="muted">Principal: {formatMoney(liability.principal)}</p>
                     <p className="muted">Payment: {formatMoney(liability.paymentMonthly)}</p>
                   </div>
-                  <button className="ghost" onClick={() => handleRemoveLiability(liability.id)}>Remove</button>
+                  <div className="row-actions">
+                    <button
+                      className="ghost"
+                      onClick={() => handlePayOffLiability(liability.id)}
+                      disabled={player.cash < (liability.principal || 0)}
+                    >
+                      Pay off
+                    </button>
+                    <button className="ghost" onClick={() => handleRemoveLiability(liability.id)}>Remove</button>
+                  </div>
                 </div>
               ))}
             </div>

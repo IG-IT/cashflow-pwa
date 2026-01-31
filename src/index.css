@@ -4,10 +4,42 @@
   font-family: "Space Grotesk", system-ui, -apple-system, sans-serif;
   line-height: 1.5;
   font-weight: 400;
-  color: #111827;
-  background-color: #f8fafc;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
+  color-scheme: light dark;
+  --bg: #f8fafc;
+  --bg-accent: #ffffffcc;
+  --bg-soft: #f8fafc;
+  --text: #1f2430;
+  --muted: #6b7280;
+  --border: #e2e8f0;
+  --card-border: #e5e7eb;
+  --chip-bg: #10131c;
+  --chip-text: #ffffff;
+  --primary: #1d4ed8;
+  --shadow: rgba(17, 24, 39, 0.08);
+  --shadow-strong: rgba(16, 19, 28, 0.25);
+  --nav-bg: rgba(255, 255, 255, 0.92);
+  --toast-bg: #111827;
+  --toast-text: #f9fafb;
+}
+
+:root[data-theme="dark"] {
+  --bg: #0b0f1a;
+  --bg-accent: #0f172acc;
+  --bg-soft: #111827;
+  --text: #e5e7eb;
+  --muted: #9ca3af;
+  --border: #1f2937;
+  --card-border: #1f2937;
+  --chip-bg: #111827;
+  --chip-text: #f9fafb;
+  --primary: #60a5fa;
+  --shadow: rgba(0, 0, 0, 0.45);
+  --shadow-strong: rgba(0, 0, 0, 0.55);
+  --nav-bg: rgba(10, 14, 24, 0.85);
+  --toast-bg: #0f172a;
+  --toast-text: #e2e8f0;
 }
 
 * {
@@ -17,6 +49,8 @@
 body {
   margin: 0;
   min-height: 100vh;
+  background: var(--bg);
+  color: var(--text);
 }
 
 #root {

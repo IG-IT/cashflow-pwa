@@ -52,11 +52,8 @@ export function baseExpensesMonthly(p: Player): number {
     (pr.taxes || 0) +
     (pr.otherExpenses || 0) +
     childTotal +
-    (pr.mortgagePayment || 0) +
     (pr.rentPayment || 0) +
-    (pr.studentLoanPayment || 0) +
-    (pr.carLoanPayment || 0) +
-    (pr.retailDebtPayment || 0)
+    0
   );
 }
 

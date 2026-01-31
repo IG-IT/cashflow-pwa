@@ -1,8 +1,8 @@
 .app {
   min-height: 100vh;
   padding: 48px 24px 96px;
-  color: #1f2430;
-  background: radial-gradient(circle at top, #f2f6ff 0%, #fdf7f1 40%, #f6fbf3 100%);
+  color: var(--text);
+  background: radial-gradient(circle at top, rgba(98, 132, 255, 0.12) 0%, rgba(249, 224, 195, 0.2) 40%, rgba(210, 244, 222, 0.35) 100%);
 }
 
 .app-header {
@@ -33,12 +33,12 @@
 }
 
 .cash-chip {
-  background: #10131c;
-  color: #fff;
+  background: var(--chip-bg);
+  color: var(--chip-text);
   padding: 16px 18px;
   border-radius: 16px;
   min-width: 200px;
-  box-shadow: 0 16px 30px rgba(16, 19, 28, 0.25);
+  box-shadow: 0 16px 30px var(--shadow-strong);
 }
 
 .cash-chip span {
@@ -61,7 +61,7 @@
 
 .top-nav button,
 .bottom-nav button {
-  border: 1px solid #cbd5f5;
+  border: 1px solid var(--border);
   padding: 10px 14px;
   border-radius: 999px;
   font-size: 0.9rem;
@@ -76,10 +76,10 @@
   grid-template-columns: repeat(3, 1fr);
   gap: 8px;
   padding: 10px 12px;
-  background: rgba(255, 255, 255, 0.92);
+  background: var(--nav-bg);
   backdrop-filter: blur(12px);
-  border-top: 1px solid #e2e8f0;
-  box-shadow: 0 -12px 20px rgba(15, 23, 42, 0.08);
+  border-top: 1px solid var(--border);
+  box-shadow: 0 -12px 20px var(--shadow);
   z-index: 50;
 }
 
@@ -90,8 +90,8 @@
   gap: 16px;
   padding: 14px 18px;
   margin-bottom: 24px;
-  background: #111827;
-  color: #f9fafb;
+  background: var(--toast-bg);
+  color: var(--toast-text);
   border-radius: 12px;
   box-shadow: 0 10px 24px rgba(17, 24, 39, 0.3);
 }
@@ -104,11 +104,11 @@
 }
 
 .panel {
-  background: #ffffffcc;
-  border: 1px solid #e5e7eb;
+  background: var(--bg-accent);
+  border: 1px solid var(--card-border);
   border-radius: 20px;
   padding: 20px;
-  box-shadow: 0 12px 30px rgba(17, 24, 39, 0.08);
+  box-shadow: 0 12px 30px var(--shadow);
   backdrop-filter: blur(10px);
 }
 
@@ -137,11 +137,12 @@ label {
 
 input,
 select {
-  border: 1px solid #d1d5db;
+  border: 1px solid var(--border);
   border-radius: 10px;
   padding: 10px 12px;
   font-size: 0.95rem;
-  background: #fff;
+  background: var(--bg);
+  color: var(--text);
 }
 
 button {
@@ -158,15 +159,22 @@ button:hover {
   box-shadow: 0 8px 18px rgba(15, 23, 42, 0.2);
 }
 
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+  box-shadow: none;
+  transform: none;
+}
+
 button.primary {
-  background: #1d4ed8;
+  background: var(--primary);
   color: #fff;
 }
 
 button.ghost {
   background: transparent;
-  border: 1px solid #cbd5f5;
-  color: #1d4ed8;
+  border: 1px solid var(--border);
+  color: var(--primary);
 }
 
 button.active {
@@ -188,8 +196,8 @@ button.active {
   gap: 12px;
   padding: 10px 12px;
   border-radius: 12px;
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
+  background: var(--bg-soft);
+  border: 1px solid var(--border);
   margin-bottom: 12px;
 }
 
@@ -223,8 +231,8 @@ button.active {
   justify-content: space-between;
   padding: 10px 12px;
   border-radius: 12px;
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
+  background: var(--bg-soft);
+  border: 1px solid var(--border);
 }
 
 .loan-grid {
@@ -237,8 +245,8 @@ button.active {
 .loan-card {
   padding: 14px;
   border-radius: 14px;
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
+  background: var(--bg-soft);
+  border: 1px solid var(--border);
 }
 
 .loan-card h3 {
@@ -269,8 +277,8 @@ button.active {
   gap: 12px;
   padding: 12px;
   border-radius: 14px;
-  border: 1px solid #e2e8f0;
-  background: #f8fafc;
+  border: 1px solid var(--border);
+  background: var(--bg-soft);
 }
 
 .list.compact {
@@ -303,6 +311,24 @@ button.active {
   flex: 1;
 }
 
+.cash-panel {
+  display: grid;
+  gap: 6px;
+  padding: 12px;
+  border-radius: 14px;
+  border: 1px solid var(--border);
+  background: var(--bg-soft);
+  margin-bottom: 12px;
+}
+
+.mortgage-display {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+  color: var(--primary);
+}
+
 .ledger {
   margin-top: 12px;
 }
@@ -312,7 +338,7 @@ button.active {
   grid-template-columns: 150px 140px 1fr 120px;
   gap: 12px;
   padding: 8px 0;
-  border-bottom: 1px dashed #e2e8f0;
+  border-bottom: 1px dashed var(--border);
   font-size: 0.85rem;
 }
 
@@ -321,8 +347,14 @@ button.active {
 }
 
 .muted {
-  color: #6b7280;
+  color: var(--muted);
   margin: 0;
+}
+
+.header-actions-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
 }
 
 .positive {

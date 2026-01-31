@@ -40,6 +40,8 @@ export type Liability = {
   paymentMonthly: number;
   autoUpdateCash: boolean;
   createdAt: number;
+  origin?: "fixed" | "manual" | "auto";
+  fixedKey?: "mortgage" | "studentLoan" | "carLoan" | "retailDebt";
 };
 
 export type Profession = {
@@ -72,6 +74,7 @@ export type LedgerEntry = {
     | "remove_asset"
     | "add_liability"
     | "remove_liability"
+    | "pay_off_liability"
     | "paycheck"
     | "receive"
     | "pay";
